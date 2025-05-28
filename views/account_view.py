@@ -6,6 +6,7 @@ from utils.widgets import PasswordEntry, StrengthMeter, SecureEntry
 class AccountView(BaseView):
     def __init__(self, parent, controller):
         super().__init__(parent)
+        self.parent = parent  # Store parent reference
         self.controller = controller
         self.current_account_id = None
         self.security = controller.security  # Add security reference
@@ -28,11 +29,37 @@ class AccountView(BaseView):
         settings_frame = ttk.Frame(self)
         settings_frame.pack(side=tk.TOP, fill=tk.X, padx=5, pady=5)
         
+        # Add Exit button first (leftmost)
+        ttk.Button(
+            settings_frame,
+            text="Exit",
+            command=self.quit_app,
+            style='Danger.TButton'
+        ).pack(side=tk.LEFT, padx=5)
+
+        ttk.Button(
+            settings_frame, 
+            text="Password Analytics",
+            command=lambda: self.show_analytics()
+        ).pack(side=tk.RIGHT, padx=5)
+        
+        ttk.Button(
+            settings_frame, 
+            text="Password Generator",
+            command=lambda: self.controller.show_password_generator()
+        ).pack(side=tk.RIGHT, padx=5)
+        
+        ttk.Button(
+            settings_frame, 
+            text="Setup 2FA",
+            command=lambda: self.controller.setup_2fa()
+        ).pack(side=tk.RIGHT, padx=5)
+        
         ttk.Button(
             settings_frame, 
             text="Reset Face Authentication",
             command=self.reset_face_auth
-        ).pack(side=tk.RIGHT)
+        ).pack(side=tk.RIGHT, padx=5)
         
         # Left panel - Account Form
         self.form_frame = ttk.LabelFrame(self, text="Account Details")
@@ -294,3 +321,12 @@ class AccountView(BaseView):
                 messagebox.showerror("Error", "Failed to copy password - Face verification required")
         finally:
             self.preview_frame.grid_remove()
+
+    def show_analytics(self):
+        """Show analytics window"""
+        if hasattr(self.parent, 'show_analytics'):
+            self.parent.show_analytics()
+
+    def quit_app(self):
+        if messagebox.askyesno("Confirm Exit", "Are you sure you want to exit?"):
+            self.parent.quit()

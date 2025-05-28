@@ -21,3 +21,9 @@ class BaseView(tk.Frame):
             fieldbackground='white',
             padding=5
         )
+        self.style.configure(
+            'Danger.TButton',
+            background=Config.THEME_COLOR['warning'],
+            foreground='white',
+            padding=5
+        )

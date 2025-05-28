@@ -1,16 +1,40 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
 from models.account_model import AccountModel
+from models.analytics_model import AnalyticsModel
+from models.totp_model import TOTPModel
 from utils.security import SecurityUtils
+from utils.password_generator import PasswordGenerator
 from datetime import datetime
 
 class AccountController:
     def __init__(self, username, security, view=None):
         self.model = AccountModel()
+        self.analytics_model = AnalyticsModel()
+        self.totp_model = TOTPModel()
+        self.password_generator = PasswordGenerator()
+        self.current_user_id = self._get_user_id(username)
         self.security = security
         self.logged_in_user = username
         self.view = view
         
+    def _get_user_id(self, username):
+        """Get or create user ID for username"""
+        try:
+            query = """
+                INSERT INTO users (username)
+                VALUES (%s)
+                ON CONFLICT (username) DO UPDATE 
+                SET username = EXCLUDED.username
+                RETURNING user_id;
+            """
+            self.model.cur.execute(query, (username,))
+            self.model.conn.commit()
+            return self.model.cur.fetchone()[0]
+        except Exception as e:
+            print(f"Error getting user_id: {e}")
+            return None
+
     def set_view(self, view):
         self.view = view
         
@@ -93,3 +117,118 @@ class AccountController:
                 messagebox.showinfo("Success", "Account deleted successfully!")
         except Exception as e:
             messagebox.showerror("Error", f"Failed to delete account: {str(e)}")
+
+    def show_password_generator(self):
+        """Show password generator dialog"""
+        from views.generator_view import PasswordGeneratorView
+        generator_window = PasswordGeneratorView(self.view, self)
+        generator_window.grab_set()
+
+    def setup_2fa(self):
+        """Set up 2FA for current user"""
+        if not self.current_user_id:
+            messagebox.showerror("Error", "User ID not found")
+            return
+            
+        try:
+            setup_data = self.totp_model.setup_2fa(
+                self.current_user_id,
+                self.logged_in_user
+            )
+            
+            def verify_code(code):
+                if self.totp_model.verify_totp(self.current_user_id, code):
+                    messagebox.showinfo("Success", "2FA has been enabled!")
+                    return True
+                messagebox.showerror("Error", "Invalid code")
+                return False
+                
+            from views.totp_setup_view import TOTPSetupView
+            TOTPSetupView(self.view, setup_data, verify_code)
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to set up 2FA: {str(e)}")
+
+    def verify_2fa(self, code):
+        """Verify 2FA code"""
+        return self.totp_model.verify_totp(self.current_user_id, code)
+
+    def refresh_analytics(self):
+        """Update analytics data"""
+        try:
+            stats = self.analytics_model.calculate_analytics(self.logged_in_user)
+            if not stats:
+                return
+                
+            history = self.analytics_model.get_historical_analytics(self.logged_in_user)
+            
+            # Update view with data
+            data = {
+                'total': stats[2],
+                'avg_strength': round(float(stats[3]), 1),
+                'weak': stats[4],
+                'medium': stats[5],
+                'strong': stats[6]
+            }
+            
+            if hasattr(self.view, 'analytics_view'):
+                self.view.analytics_view.update_stats(data)
+                
+                if history:
+                    dates = [h[0] for h in history]
+                    values = [float(h[1]) for h in history]
+                    self.view.analytics_view.plot_history(dates, values)
+                    
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to refresh analytics: {str(e)}")
+
+    def generate_password(self, preferences=None):
+        """Generate password with given preferences"""
+        if preferences is None:
+            preferences = {
+                'min_length': 16,
+                'use_uppercase': True,
+                'use_lowercase': True,
+                'use_numbers': True,
+                'use_symbols': True,
+                'avoid_similar': True
+            }
+        return self.password_generator.generate_password(preferences)
+
+    def show_analytics(self):
+        """Show analytics window and load data"""
+        try:
+            stats = self.analytics_model.calculate_analytics(self.logged_in_user)
+            if not stats:
+                messagebox.showerror("Error", "No data available for analysis")
+                return
+                
+            history = self.analytics_model.get_historical_analytics(self.logged_in_user)
+            
+            # Create analytics window
+            analytics_window = tk.Toplevel(self.view)
+            analytics_window.title("Password Analytics")
+            analytics_view = AnalyticsView(analytics_window, self)
+            analytics_view.pack(fill=tk.BOTH, expand=True)
+            
+            # Update view with data
+            analytics_view.update_stats({
+                'total': stats[2],
+                'avg_strength': round(stats[3], 1),
+                'weak': stats[4],
+                'medium': stats[5],
+                'strong': stats[6]
+            })
+            
+            if history:
+                dates = [h[0] for h in history]
+                values = [h[1] for h in history]
+                analytics_view.plot_history(dates, values)
+            
+            # Configure window
+            analytics_window.geometry("800x600")
+            analytics_window.transient(self.view)
+            analytics_window.grab_set()
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to load analytics: {str(e)}")

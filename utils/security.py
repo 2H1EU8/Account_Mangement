@@ -322,28 +322,28 @@ class SecurityUtils:
         if operation not in self.sensitive_operations:
             return True
             
-        # Configure camera and canvas
-        cap = cv2.VideoCapture(0)
-        if not cap.isOpened():
-            if status_label:
-                status_label.config(text="Failed to open camera")
-            return False
-            
-        # Set capture resolution
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.preview_size[0])
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.preview_size[1])
-        
-        if canvas:
-            canvas.configure(width=self.preview_size[0], height=self.preview_size[1])
-            canvas.update()
-        
         try:
-            # Load reference image
+            # Load reference image first
             face_path = self._get_user_face_path(username)
             self.reference_image = cv2.imread(face_path)
             if self.reference_image is None:
                 raise Exception("Failed to load reference image")
+
+            # Configure camera and canvas
+            cap = cv2.VideoCapture(0)
+            if not cap.isOpened():
+                if status_label:
+                    status_label.config(text="Failed to open camera")
+                return False
                 
+            # Set capture resolution
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.preview_size[0])
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.preview_size[1])
+            
+            if canvas:
+                canvas.configure(width=self.preview_size[0], height=self.preview_size[1])
+                canvas.update()
+            
             max_attempts = 3
             attempts = 0
             
@@ -370,32 +370,35 @@ class SecurityUtils:
                     if status_label:
                         status_label.config(text=f"Verifying... ({max_attempts - attempts} attempts left)")
                 
-                if has_face:
-                    # Compare with reference
-                    result = cv2.matchTemplate(
-                        cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY),
-                        cv2.cvtColor(self.reference_image, cv2.COLOR_BGR2GRAY),
-                        cv2.TM_CCOEFF_NORMED
-                    )
-                    similarity = np.max(result)
-                    
-                    if similarity > self.face_threshold:
-                        if operation == 'login':
-                            self.logged_in_user = username  # Only store user on login
-                        return True
+                if self._detect_face(frame)[0]:
+                    # Compare with reference using grayscale
+                    try:
+                        frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                        ref_gray = cv2.cvtColor(self.reference_image, cv2.COLOR_BGR2GRAY)
+                        
+                        result = cv2.matchTemplate(frame_gray, ref_gray, cv2.TM_CCOEFF_NORMED)
+                        similarity = np.max(result)
+                        
+                        if similarity > self.face_threshold:
+                            if operation == 'login':
+                                self.logged_in_user = username
+                            return True
+                    except Exception as e:
+                        print(f"Face comparison warning: {e}")
                         
                 attempts += 1
-                cv2.waitKey(100)  # Add small delay
+                cv2.waitKey(100)
                 
         except Exception as e:
             print(f"Verification error: {e}")
             if status_label:
                 status_label.config(text=f"Verification error: {str(e)}")
             return False
-        
+            
         finally:
-            cap.release()
-            cv2.destroy_all_windows()
+            if 'cap' in locals():
+                cap.release()
+            cv2.destroyAllWindows()
             
         return False
 

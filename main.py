@@ -1,6 +1,7 @@
 import tkinter as tk
 from views.account_view import AccountView
-from views.login_view import LoginView  # Add this import
+from views.login_view import LoginView
+from views.analytics_view import AnalyticsView  # Add new import
 from controllers.account_controller import AccountController
 from config import Config
 import threading
@@ -45,24 +46,24 @@ class Application(tk.Tk):
         self.geometry(Config.WINDOW_SIZE)
         
         self.security = SecurityUtils()
+        
+        # Show login
         self.show_login()
-        
-        # Add menu
-        self.create_menu()
-        
+
     def show_login(self):
         self.clear_window()
         self.login_view = LoginView(self, self.security, self.on_login_success)
         self.login_view.pack(expand=True, pady=20)
         
     def on_login_success(self, username):
+        """Handle successful login"""
         self.clear_window()
         self.controller = AccountController(username, self.security)
         self.account_view = AccountView(self, self.controller)
         self.controller.set_view(self.account_view)
         self.account_view.pack(fill=tk.BOTH, expand=True)
         self.schedule_password_checks()
-        
+
     def clear_window(self):
         for widget in self.winfo_children():
             widget.destroy()
@@ -91,13 +92,31 @@ class Application(tk.Tk):
         self.wait_window(auth_dialog)
         return auth_dialog.result
 
-    def create_menu(self):
-        menubar = tk.Menu(self)
-        self.config(menu=menubar)
-        
-        settings_menu = tk.Menu(menubar, tearoff=0)
-        menubar.add_cascade(label="Settings", menu=settings_menu)
-        settings_menu.add_command(label="Reset Face Data", command=self.reset_face_data)
+    def show_analytics(self):
+        try:
+            if hasattr(self, 'analytics_window'):
+                self.analytics_window.destroy()
+                
+            self.analytics_window = tk.Toplevel(self)
+            self.analytics_window.title("Password Analytics")
+            
+            # Create and store analytics view
+            self.controller.view.analytics_view = AnalyticsView(
+                self.analytics_window, 
+                self.controller
+            )
+            self.controller.view.analytics_view.pack(fill=tk.BOTH, expand=True)
+            
+            # Configure window
+            self.analytics_window.geometry("800x600")
+            self.analytics_window.transient(self)
+            self.analytics_window.grab_set()
+            
+            # Load initial data
+            self.controller.refresh_analytics()
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to show analytics: {str(e)}")
 
     def reset_face_data(self):
         if messagebox.askyesno("Confirm Reset", 
