@@ -1,0 +1,8 @@
+wheel>=0.42.0
+setuptools<81.0.0
+psycopg2-binary>=2.9.9
+cryptography>=41.0.7
+opencv-python>=4.8.1.78
+numpy>=1.26.2
+pyperclip>=1.8.2
+Pillow>=10.0.0  # Required for image handling in tkinter
